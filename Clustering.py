@@ -28,7 +28,7 @@ unlabeled_train = pd.read_csv(filepath + "unlabeledTrainData.tsv", header=0,
  delimiter="\t", quoting=3 )
 
 
-# In[ ]:
+# In[4]:
 
 import json
 
@@ -39,7 +39,19 @@ with open(filepath+'tfidf_scores.json') as json_data:
 bestwords_tfidf = np.array(sorted(tfidf_scores, key=tfidf_scores.get,reverse=True))
 
 
-# In[4]:
+# In[5]:
+
+with open('/Users/DanLo1108/Downloads/modified_text_with_1000_clusters/train_modified_1000.json') as json_data:
+    modified_train = json.load(json_data)
+    json_data.close()
+
+
+# In[22]:
+
+modified_train['review'][0]
+
+
+# In[5]:
 
 #Collect random 80/20 train/test split
 import random
@@ -51,7 +63,7 @@ train=train_data.ix[train_inds]
 test=train_data.ix[test_inds]
 
 
-# In[5]:
+# In[6]:
 
 # Import various modules for string cleaning
 
@@ -88,7 +100,7 @@ def review_to_wordlist( review, remove_stopwords=False, stem=False ):
     return(words)
 
 
-# In[6]:
+# In[7]:
 
 tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
 
@@ -113,7 +125,7 @@ def review_to_sentences( review, tokenizer, remove_stopwords=False ):
     return sentences
 
 
-# In[7]:
+# In[8]:
 
 #Create sentences to feed into model
 
@@ -180,7 +192,7 @@ def create_bag_of_centroids( wordlist, word_centroid_map ):
     return bag_of_centroids
 
 
-# In[11]:
+# In[19]:
 
 clean_train_reviews = []
 for review in train["review"]:
@@ -191,18 +203,22 @@ for review in test["review"]:
     clean_test_reviews.append( review_to_wordlist( review,         remove_stopwords=True ))
 
 
-# In[225]:
+# In[12]:
 
 def normalize(array):
     return array/sum(array)
 
 
-# In[285]:
+# In[22]:
+
+#Runs clustering for different number of clusters
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.cluster import KMeans
 from sklearn.metrics import roc_auc_score
-denominators = [5.] #denominator of fraction for number of clusters as fraction of length training data
+denominators = [3.,4.,5.,6.,7.] #denominator of fraction for number of clusters as fraction of length training data
+train_AUCs_list=[]
+test_AUCs_list=[]
 for denom in denominators:
     
     word_vectors = model.syn0
@@ -213,6 +229,7 @@ for denom in denominators:
     
     word_centroid_map = dict(zip(model.index2word, idx))
     
+    #Creates train centroids
     train_centroids = np.zeros((train['review'].size, num_clusters), dtype='float32')
     counter = 0
     for review in clean_train_reviews:
@@ -221,6 +238,7 @@ for denom in denominators:
         
     print 'train reviews complete'
     
+    #Creates test centroids
     test_centroids = np.zeros((test['review'].size, num_clusters), dtype='float32')
     counter=0
     for review in clean_test_reviews:
@@ -267,7 +285,7 @@ for denom in denominators:
     
     #Clusters training and testing centroids
     total_centroids=np.concatenate((train_centroids,test_centroids),axis=0)
-    centroid_clusters=KMeans(n_clusters=int(np.sqrt(num_clusters)))
+    centroid_clusters=KMeans(n_clusters=int(np.sqrt(num_clusters)/2))
     centroid_clusters.fit(total_centroids)
     
     train_centroid_clusters = centroid_clusters.predict(train_centroids)
@@ -275,8 +293,9 @@ for denom in denominators:
     
     print 'centroids clustered'
     
-    #Run boosting 10 times
-    for iteration in range(25):
+    #Run boosting N times
+    N=1 #N=1 - no boosting
+    for iteration in range(N):
         
         #This block of code identifies how often each cluster is misclassified
         bad_clusters={}
@@ -293,22 +312,55 @@ for denom in denominators:
         for bc in bad_clusters:
             inds = [ind for ind in range(len(train_centroid_clusters)) if train_centroid_clusters[ind]==bc] 
             cw_inds=centroid_weights[inds]
-            centroid_weights[inds]=cw_inds*(1+float(bad_clusters[bc])/len(inds))
+            centroid_weights[inds]=cw_inds*(1+float(bad_clusters[bc])/len(inds))*5
             centroid_weights=normalize(centroid_weights)
         
         #Fits random forest classifier with weights set to centroid weights
-        forest = RandomForestClassifier(n_estimators=100)
-        forest1 = forest.fit(train_centroids,train["sentiment"],sample_weight=centroid_weights)
+        scores=[]
+        test_AUCs=[]
+        train_AUCs=[]
+        for i in range(3):
+            forest = RandomForestClassifier(n_estimators=100)
+            forest1 = forest.fit(train_centroids,train["sentiment"],sample_weight=centroid_weights)
 
-        score = forest1.score(test_centroids,test['sentiment'])
-        AUC = roc_auc_score(test['sentiment'],forest1.predict_proba(test_centroids)[:,1])
+            scores.append(forest1.score(test_centroids,test['sentiment']))
+            test_AUCs.append(roc_auc_score(test['sentiment'],forest1.predict_proba(test_centroids)[:,1]))
+            
+        for i in range(3):
+            forest = RandomForestClassifier(n_estimators=100)
+            forest.fit(train_centroids,train["sentiment"])
+
+            scores.append(forest1.score(train_centroids,train['sentiment']))
+            train_AUCs.append(roc_auc_score(train['sentiment'],forest1.predict_proba(train_centroids)[:,1]))
 
         if (iteration+1) in [1,2,3,4,5,8,10,15,20,25]:
-            print (iteration+1), 'num_clusters: ',str(num_clusters),'    acc: ', str(score), '    AUC: ',str(AUC)
+            print (iteration+1), 'num_clusters: ',str(num_clusters),'    acc: ', str(np.mean(scores)), '    AUC: ',str(np.mean(AUCs))     
     
+    test_AUCs_list.append(np.mean(test_AUCs))
+    train_AUCs_list.append(np.mean(train_AUCs))
 
 
 # In[ ]:
 
+plot()
 
+
+# In[41]:
+
+model.most_similar('dog')
+
+
+# In[61]:
+
+model.most_similar('movi')
+
+
+# In[ ]:
+
+model.most_similar('good')
+
+
+# In[ ]:
+
+model.most_similar('bad')
 

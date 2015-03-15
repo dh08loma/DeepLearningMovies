@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[1]:
+# In[13]:
 
 import pandas as pd
 import numpy as np
@@ -18,18 +18,18 @@ from sklearn import cross_validation
 from pylab import *
 
 
-# In[2]:
+# In[14]:
 
 filepath = '/Users/DanLo1108/Documents/Grad School Files/Advanced ML/Final Project/'
 
 
-# In[42]:
+# In[15]:
 
 train = pd.read_table(filepath + 'labeledTrainData.tsv')
 test = pd.read_table(filepath + 'testData.tsv')
 
 
-# In[10]:
+# In[4]:
 
 # The data is pretty simple. It consists of a review ID (each of these are unique,
 # so I'm pretty sure we can disregard this column), sentiment (0 is for a bad review,
@@ -46,7 +46,7 @@ train.head()
 len(train[train.sentiment == 1])/float(len(train))
 
 
-# In[22]:
+# In[6]:
 
 # How long are the reviews?
 
@@ -65,7 +65,7 @@ print 'Mean num words negative: ',np.mean(word_lengths_neg)
 
 ##### Data cleaning
 
-# In[4]:
+# In[7]:
 
 # This function cleans up a review into something more usable.
 # Input: raw review
@@ -100,7 +100,7 @@ def clean_review(x,stem):
 
 ####### Let's compare different stemmers to find best one:
 
-# In[5]:
+# In[8]:
 
 from nltk import stem
 x=train.ix[1] #arbitrary review observation
@@ -115,13 +115,13 @@ lanc=clean_review(x,lancaster)
 snow=clean_review(x,snowball)
 
 
-# In[91]:
+# In[9]:
 
 #Gets indices of differing stemmer word interpretations
 diff=[i for i in range(len(lanc)) if lanc[i] != snow[i] or lanc[i] != port[i] or snow[i] != port[i]]
 
 
-# In[86]:
+# In[10]:
 
 # Results: Lancaster works better for words which end in 'y',
 # however it strips much more of the word than porter or snowball.
@@ -137,7 +137,7 @@ for d in diff:
     print lanc[d],',', port[d],',', snow[d]
 
 
-# In[6]:
+# In[11]:
 
 # Convert all reviews to cleaned version: **Takes ~5 minutes
 
@@ -147,7 +147,7 @@ train['review'] = train.apply(lambda x: clean_review(x,snowball), axis=1)
 test['review'] = test.apply(lambda x: clean_review(x,snowball), axis=1)
 
 
-# In[7]:
+# In[12]:
 
 train['review_clean']=train['review'].apply(lambda x: string.join(x))
 
